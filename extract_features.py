@@ -2,6 +2,11 @@ import numpy as np
 import librosa
 
 
+# helper fo check if silence is detected
+def is_silent(window, rms_threshold=1e-5):
+    # window: float numpy array
+    return np.mean(window.astype(float)**2) < rms_threshold
+
 def extract_fft(audio_signal, sr=16000):
     """
     Extract simple FFT-based features from an audio signal.

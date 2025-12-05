@@ -13,7 +13,7 @@ from time import perf_counter
 
 # Importing models
 from models import mock_dl_predict, mock_ml_predict, load_ml_model, ml_predict
-from extract_features import extract_features
+from extract_features import extract_features, is_silent
 
 SR = 16000  # choose sample rate (must match models or resample)
 WINDOW_SEC = 1.0
@@ -85,11 +85,16 @@ def start_inference_threads(window):
     # results into latest_ml/latest_dl protected by results_lock
     def run_ml():
         nonlocal window
-        features = extract_features(window)
-        # label, prob, lat = mock_ml_predict(features)
-        label, prob, lat = ml_predict(features)
+        global latest_ml
+        if is_silent(window):
+            with results_lock:
+                latest_ml = ("silence", 0.0, 0.0)
+        else:
+            features = extract_features(window)
+            # label, prob, lat = mock_ml_predict(features)
+            label, prob, lat = ml_predict(features)
         with results_lock:
-            global latest_ml
+            latest_ml
             latest_ml = (label, prob, lat)
 
     def run_dl():
