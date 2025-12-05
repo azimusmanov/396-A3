@@ -9,12 +9,6 @@ from joblib import load
 # labels used for demo
 LABELS = ["laughing", "coughing", "clapping", "knocking", "alarm"]
 
-# global vars
-ml_model = None
-scaler = None
-classes = None
-activities = None
-
 # mock model functions for GUI testing
 # Both functions behave identically and produce a rando, label
 def mock_ml_predict(window):
@@ -42,7 +36,7 @@ def load_ml_model():
     ml_scaler = artifact["scaler"]
     ml_classes = artifact["classes"]
     ml_activities = artifact["activities"]
-    print(ml_model, ml_scaler, ml_classes, ml_activities)
+    # print(ml_model, ml_scaler, ml_classes, ml_activities)
 
 
 def ml_predict(window):
@@ -68,3 +62,8 @@ def ml_predict(window):
 
 if __name__ == '__main__':
     load_ml_model()
+    print("ml_model:", ml_model, "\n")
+    print("ml_scaler:", ml_scaler, "\n")
+    print("ml_classes:", ml_classes, "\n")
+    print("ml_activities:", ml_activities, "\n")
+
