@@ -79,6 +79,7 @@ def ml_predict(features: np.ndarray):
         pred_name = ml_activities[pred_class_label]
     confidence = float(probs[pred_idx])
     t_ms = (perf_counter() - t0) * 1000.0
+    # todo: RETURN NONE if no confidences are above a certain threshold
     return pred_name, confidence, t_ms
 
 
