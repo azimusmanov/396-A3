@@ -79,7 +79,7 @@ def ml_predict(features: np.ndarray):
         pred_name = ml_activities[pred_class_label]
     confidence = float(probs[pred_idx])
     t_ms = (perf_counter() - t0) * 1000.0
-    return pred_class_label, pred_name, confidence, t_ms
+    return pred_name, confidence, t_ms
 
 
 def audio_to_features(window: np.ndarray, sr: int = 16000) -> np.ndarray:
