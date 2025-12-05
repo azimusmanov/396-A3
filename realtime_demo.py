@@ -1,4 +1,6 @@
 # realtime_demo.py
+
+# Imports
 import sounddevice as sd
 import numpy as np
 import collections
@@ -6,9 +8,11 @@ import threading
 import time
 import matplotlib.pyplot as plt
 import soundfile as sf
-import random
 from queue import Queue
 from time import perf_counter
+
+# Importing models
+from models import mock_dl_predict, mock_ml_predict
 
 SR = 16000  # choose sample rate (must match models or resample)
 WINDOW_SEC = 1.0
@@ -17,9 +21,6 @@ WINDOW_SAMPLES = int(WINDOW_SEC * SR)
 HOP_SAMPLES = int(HOP_SEC * SR)
 BUFFER_MAX_SECONDS = 10
 BUFFER_MAX_SAMPLES = BUFFER_MAX_SECONDS * SR
-
-# labels used for demo
-LABELS = ["laughing", "coughing", "clapping", "knocking", "alarm"]
 
 # Thread-safe deque for audio
 audio_deque = collections.deque(maxlen=BUFFER_MAX_SAMPLES)
@@ -63,22 +64,6 @@ def windowing_worker(stop_event):
         # sleep until next hop
         time.sleep(HOP_SEC * 0.9)
 
-# mock model functions (replace with real model inference)
-def mock_ml_predict(window):
-    t0 = perf_counter()
-    time.sleep(0.02 + random.random() * 0.01)  # 20-30 ms simulate
-    label = random.choice(LABELS)
-    prob = 0.5 + random.random() * 0.5
-    t = (perf_counter() - t0) * 1000.0
-    return label, float(prob), t
-
-def mock_dl_predict(window):
-    t0 = perf_counter()
-    time.sleep(0.05 + random.random() * 0.05)  # 50-100 ms simulate
-    label = random.choice(LABELS)
-    prob = 0.6 + random.random() * 0.4
-    t = (perf_counter() - t0) * 1000.0
-    return label, float(prob), t
 
 # visualization thread using Matplotlib
 # We'll update the plot using Matplotlib's animation on the main thread.

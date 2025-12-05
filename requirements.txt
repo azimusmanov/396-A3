@@ -2,3 +2,5 @@ sounddevice
 numpy
 matplotlib
 soundfile
+scikit-learn
+joblib
