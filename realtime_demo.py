@@ -12,7 +12,8 @@ from queue import Queue
 from time import perf_counter
 
 # Importing models
-from models import mock_dl_predict, mock_ml_predict
+from models import mock_dl_predict, mock_ml_predict, load_ml_model, ml_predict
+from extract_features import extract_features
 
 SR = 16000  # choose sample rate (must match models or resample)
 WINDOW_SEC = 1.0
@@ -84,7 +85,9 @@ def start_inference_threads(window):
     # results into latest_ml/latest_dl protected by results_lock
     def run_ml():
         nonlocal window
-        label, prob, lat = mock_ml_predict(window)
+        features = extract_features(window)
+        # label, prob, lat = mock_ml_predict(features)
+        label, prob, lat = ml_predict(features)
         with results_lock:
             global latest_ml
             latest_ml = (label, prob, lat)
@@ -111,7 +114,7 @@ def main():
     # update the plot. The animation callback polls the window_queue and
     # starts background inference threads when a new window is available.
     from matplotlib.animation import FuncAnimation
-
+    load_ml_model()
     plt.ion()
     fig, ax = plt.subplots(figsize=(16, 6))
     x = np.linspace(-WINDOW_SEC, 0, WINDOW_SAMPLES)
