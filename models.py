@@ -17,6 +17,34 @@ except Exception:
 # ONLY USED FOR MOCK FUNCTIONS
 LABELS = ["laughing", "coughing", "clapping", "knocking", "alarm"]
 
+# Debug flag: prints top classes and confidences
+DEBUG_PREDICTIONS = True
+
+# Disable thresholds: always return a label (no 'unknown')
+ML_MIN_CONFIDENCE = 0.0
+DL_MIN_CONFIDENCE = 0.0
+
+# Class-wise penalty to reduce biased classes winning on tiny margins
+# Keys should match names in ml_activities; values are subtracted from probs
+CLASS_PENALTY = {
+    'alarm': 0.15,
+    'coughing': 0.15,
+}
+
+# DL label mapping: user-specified index → activity name
+# Provided mapping:
+# 11 → clapping, 2 → alarm, 23 → coughing, 4 → laughing, 20 → knocking
+DL_TO_ACTIVITY_MAP = {
+    11: "clapping",
+    2: "alarm",
+    23: "coughing",
+    4: "laughing",
+    20: "knocking",
+}
+def set_dl_mapping(mapping: dict):
+    global DL_TO_ACTIVITY_MAP
+    DL_TO_ACTIVITY_MAP = dict(mapping or {})
+
 # mock model functions for GUI testing
 # Both functions behave identically and produce a rando, label
 def mock_ml_predict(window):
@@ -98,7 +126,6 @@ def ml_predict(features: np.ndarray):
         pred_name = ml_activities[pred_class_label]
     confidence = float(probs[pred_idx])
     t_ms = (perf_counter() - t0) * 1000.0
-    # todo: RETURN NONE if no confidences are above a certain threshold
     return pred_name, confidence, t_ms
 
 
@@ -149,8 +176,8 @@ def dl_predict(window: np.ndarray, sr: int = 16000):
     else:
         pred_idx = int(np.argmax(probs))
         confidence = float(probs[pred_idx])
-    # Map index to name if available from ml_activities; adjust if DL has its own label set
-    label = ml_activities[pred_idx] if isinstance(ml_activities, (list, tuple)) and pred_idx < len(ml_activities) else str(pred_idx)
+    # Map DL class index to activity name; fallback to index string
+    label = DL_TO_ACTIVITY_MAP.get(int(pred_idx), str(pred_idx))
     t_ms = (perf_counter() - t0) * 1000.0
     return label, confidence, t_ms
 
@@ -160,11 +187,62 @@ def audio_to_features(window: np.ndarray, sr: int = 16000) -> np.ndarray:
     return extract_features(window, sr=sr, feature_type="all")
 
 if __name__ == '__main__':
+    def inspect_ml_artifact(path: str = "svm_small_to_large.joblib"):
+        print("\n--- Inspect ML Artifact ---")
+        try:
+            art = load(path)
+        except Exception as e:
+            print("Load error:", e)
+            return
+        keys = list(art.keys()) if isinstance(art, dict) else []
+        print("Keys:", keys)
+        model = art.get("model")
+        scaler = art.get("scaler")
+        classes = art.get("classes")
+        activities = art.get("activities")
+        feat_dim = art.get("feature_dim")
+        print("Model:", type(model))
+        print("Scaler:", type(scaler))
+        print("Classes (len):", len(classes) if classes is not None else None)
+        print("Classes sample:", classes[:10] if classes is not None else None)
+        print("Activities (len):", len(activities) if activities is not None else None)
+        print("Activities sample:", activities[:10] if activities is not None else None)
+        print("feature_dim:", feat_dim)
+        if hasattr(scaler, 'mean_') and hasattr(scaler, 'scale_'):
+            print("Scaler mean_ shape:", getattr(scaler, 'mean_', None).shape)
+            print("Scaler scale_ shape:", getattr(scaler, 'scale_', None).shape)
+        else:
+            print("Scaler does not have mean_/scale_ (is it the right type?)")
+
+    def quick_ml_sanity(num_trials: int = 5):
+        print("\n--- Quick ML Sanity (random features) ---")
+        if ml_model is None:
+            try:
+                load_ml_model()
+            except Exception as e:
+                print("Load error:", e)
+                return
+        # Use feature_dim if available; else assume 44
+        d = ml_feature_dim if isinstance(ml_feature_dim, (int, np.integer)) else 44
+        rng = np.random.default_rng(0)
+        for i in range(num_trials):
+            x = rng.normal(0, 1, d)
+            try:
+                x_scaled = ml_scaler.transform(x.reshape(1, -1))
+                probs = ml_model.predict_proba(x_scaled)[0]
+                top = int(np.argmax(probs))
+                print(f"trial {i}: top={ml_classes[top] if ml_classes is not None else top} probs_top={float(np.max(probs)):.3f}")
+            except Exception as e:
+                print("trial error:", e)
+
+    # Run inspections
+    inspect_ml_artifact()
     load_ml_model()
     print("ml_model:", type(ml_model))
     print("ml_scaler:", type(ml_scaler))
     print("ml_classes:", ml_classes)
     print("ml_activities:", ml_activities)
+    quick_ml_sanity()
     
     # Simple test runner for the DL model file
     def test_dl_model_info(path: str = "best_finetuned_model_small_to_large.h5"):
@@ -205,4 +283,5 @@ if __name__ == '__main__':
 
     # Run the DL model info test
     test_dl_model_info()
+
 
