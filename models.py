@@ -5,7 +5,10 @@ import numpy as np
 from sklearn.svm import SVC
 from sklearn.preprocessing import StandardScaler
 from joblib import load
+import os
+from datetime import datetime
 from extract_features import extract_features
+import librosa
 try:
     from tensorflow.keras.models import load_model as keras_load_model
 except Exception:
@@ -56,7 +59,7 @@ def load_ml_model(path: str = "svm_small_to_large.joblib"):
     print("ML Model successfully loaded")
 
 
-def load_dl_model(path: str = "model.h5"):
+def load_dl_model(path: str = "best_finetuned_model_small_to_large.h5"):
     """
     Loader for fine-tuned Ubicoustics model from A2
     """
@@ -102,14 +105,34 @@ def ml_predict(features: np.ndarray):
 def dl_predict(window: np.ndarray, sr: int = 16000):
     """
     Returns (label_str, confidence_float, latency_ms).
+    Preprocesses raw audio window into log-mel spectrogram of shape (96, 64, 1)
+    to match the DL model input (None, 96, 64, 1).
     """
     if dl_model is None:
         raise RuntimeError("DL model not loaded. Call load_dl_model() first.")
 
     t0 = perf_counter()
-    x = np.asarray(window, dtype=float)
-    # Basic shaping: (1, T) for a waveform model; adjust to your model's input
-    x_in = x.reshape(1, -1)
+    y = np.asarray(window, dtype=float)
+    # Build log-mel spectrogram: 96 time frames x 64 mel bins
+    n_mels = 64
+    n_fft = 512
+    hop_length = 160  # ~10 ms at 16kHz
+    win_length = 400  # 25 ms window
+    target_time = 96
+
+    mel = librosa.feature.melspectrogram(
+        y=y, sr=sr, n_fft=n_fft, hop_length=hop_length, win_length=win_length,
+        n_mels=n_mels, power=2.0
+    )  # shape (n_mels, T)
+    mel_db = librosa.power_to_db(mel, ref=np.max)
+    feat = mel_db.T  # (T, 64)
+    if feat.shape[0] < target_time:
+        pad = target_time - feat.shape[0]
+        feat = np.pad(feat, ((0, pad), (0, 0)), mode='constant', constant_values=feat.min())
+    else:
+        feat = feat[:target_time, :]
+    x_in = feat[np.newaxis, :, :, np.newaxis].astype(np.float32)  # (1, 96, 64, 1)
+
     preds = dl_model.predict(x_in, verbose=0)
     # Handle different output shapes: scalar, vector, batch x classes
     if isinstance(preds, (list, tuple)):
@@ -142,4 +165,44 @@ if __name__ == '__main__':
     print("ml_scaler:", type(ml_scaler))
     print("ml_classes:", ml_classes)
     print("ml_activities:", ml_activities)
+    
+    # Simple test runner for the DL model file
+    def test_dl_model_info(path: str = "best_finetuned_model_small_to_large.h5"):
+        print("\n--- DL Model File Info ---")
+        print(f"Path: {path}")
+        if not os.path.exists(path):
+            print("Exists: False (file not found)")
+            return
+        size_bytes = os.path.getsize(path)
+        mtime = datetime.fromtimestamp(os.path.getmtime(path))
+        print("Exists: True")
+        print(f"Size: {size_bytes/1_048_576:.2f} MB")
+        print(f"Modified: {mtime:%Y-%m-%d %H:%M:%S}")
+
+        try:
+            load_dl_model(path)
+        except Exception as e:
+            print("Load error:", e)
+            return
+
+        try:
+            print("\n--- DL Model Summary ---")
+            dl_model.summary()  # prints to stdout
+        except Exception as e:
+            print("Summary error:", e)
+
+        try:
+            inputs = getattr(dl_model, 'inputs', None)
+            outputs = getattr(dl_model, 'outputs', None)
+            if inputs:
+                print("Input shapes:", [tuple(getattr(t, 'shape', ())) for t in inputs])
+            if outputs:
+                print("Output shapes:", [tuple(getattr(t, 'shape', ())) for t in outputs])
+            if hasattr(dl_model, 'layers'):
+                print("Layers:", len(dl_model.layers))
+        except Exception as e:
+            print("Introspection error:", e)
+
+    # Run the DL model info test
+    test_dl_model_info()
 
