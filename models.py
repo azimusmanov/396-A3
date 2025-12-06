@@ -6,6 +6,10 @@ from sklearn.svm import SVC
 from sklearn.preprocessing import StandardScaler
 from joblib import load
 from extract_features import extract_features
+try:
+    from tensorflow.keras.models import load_model as keras_load_model
+except Exception:
+    keras_load_model = None
 
 # ONLY USED FOR MOCK FUNCTIONS
 LABELS = ["laughing", "coughing", "clapping", "knocking", "alarm"]
@@ -39,6 +43,7 @@ ml_scaler = None
 ml_classes = None
 ml_activities = None
 ml_feature_dim = None
+dl_model = None
 
 def load_ml_model(path: str = "svm_small_to_large.joblib"):
     artifact = load(path)
@@ -49,6 +54,17 @@ def load_ml_model(path: str = "svm_small_to_large.joblib"):
     ml_activities = artifact.get("activities")
     ml_feature_dim = artifact.get("feature_dim")
     print("ML Model successfully loaded")
+
+
+def load_dl_model(path: str = "model.h5"):
+    """
+    Loader for fine-tuned Ubicoustics model from A2
+    """
+    global dl_model
+    if keras_load_model is None:
+        raise RuntimeError("TensorFlow/Keras not available. Install tensorflow to load .h5 models.")
+    dl_model = keras_load_model(path)
+    print("DL Model successfully loaded")
 
 
 def ml_predict(features: np.ndarray):
@@ -81,6 +97,39 @@ def ml_predict(features: np.ndarray):
     t_ms = (perf_counter() - t0) * 1000.0
     # todo: RETURN NONE if no confidences are above a certain threshold
     return pred_name, confidence, t_ms
+
+
+def dl_predict(window: np.ndarray, sr: int = 16000):
+    """
+    Returns (label_str, confidence_float, latency_ms).
+    """
+    if dl_model is None:
+        raise RuntimeError("DL model not loaded. Call load_dl_model() first.")
+
+    t0 = perf_counter()
+    x = np.asarray(window, dtype=float)
+    # Basic shaping: (1, T) for a waveform model; adjust to your model's input
+    x_in = x.reshape(1, -1)
+    preds = dl_model.predict(x_in, verbose=0)
+    # Handle different output shapes: scalar, vector, batch x classes
+    if isinstance(preds, (list, tuple)):
+        preds = preds[0]
+    preds = np.asarray(preds)
+    if preds.ndim == 2:
+        probs = preds[0]
+    else:
+        probs = preds
+    # Softmax-like selection
+    if probs.ndim == 0:
+        confidence = float(probs)
+        pred_idx = 0
+    else:
+        pred_idx = int(np.argmax(probs))
+        confidence = float(probs[pred_idx])
+    # Map index to name if available from ml_activities; adjust if DL has its own label set
+    label = ml_activities[pred_idx] if isinstance(ml_activities, (list, tuple)) and pred_idx < len(ml_activities) else str(pred_idx)
+    t_ms = (perf_counter() - t0) * 1000.0
+    return label, confidence, t_ms
 
 
 def audio_to_features(window: np.ndarray, sr: int = 16000) -> np.ndarray:

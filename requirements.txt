@@ -5,3 +5,4 @@ soundfile
 scikit-learn==1.6.1
 joblib
 librosa
+tensorflow
